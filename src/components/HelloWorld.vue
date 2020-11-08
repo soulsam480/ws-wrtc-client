@@ -13,7 +13,15 @@ export default defineComponent({
 
     //todo rtc
     const { RTCPeerConnection, RTCSessionDescription } = window;
-    const peerConnection = new RTCPeerConnection();
+    const config = {
+      iceServers: [
+        {
+          urls: ["stun:stun.l.google.com:19302"],
+        },
+      ],
+    };
+
+    const peerConnection = new RTCPeerConnection(config);
     const dc = peerConnection.createDataChannel("chanel");
     let rdc: RTCDataChannel;
 
@@ -26,7 +34,7 @@ export default defineComponent({
       socket.emit("call-user", {
         offer,
         to: id,
-      }); 
+      });
     };
     const Send = () => {
       dc.send(sender.value);
@@ -60,11 +68,13 @@ export default defineComponent({
 
       //?====================
       socket.on("remove-user", (data: any) => {
+        window.alert(`disconnected from ${data.socketId}`);
         users.splice(users.indexOf(data.socketId), 1);
       });
 
       //?-====================================
       socket.on("call-made", async (data: any) => {
+        window.alert(`${data.socket} is calling`);
         await peerConnection.setRemoteDescription(
           new RTCSessionDescription(data.offer)
         );
@@ -96,7 +106,10 @@ export default defineComponent({
         rdc.onmessage = (e) => {
           sender.value = e.data;
         };
-        rdc.onopen = (e) => console.log("connected");
+        rdc.onopen = (e) => {
+          console.log("connected");
+          window.alert("connected");
+        };
       };
     });
 
