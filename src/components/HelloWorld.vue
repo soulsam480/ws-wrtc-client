@@ -7,32 +7,47 @@ export default defineComponent({
   name: "HelloWorld",
   setup: () => {
     let socket: Socket;
-    const sender = ref<string>();
-    const receiver = ref<string>();
+    const sender = ref<string>("");
     const users = reactive<Array<string>>([]);
+    let isAlreadyCalling = false;
 
+    //todo rtc
     const { RTCPeerConnection, RTCSessionDescription } = window;
-
     const peerConnection = new RTCPeerConnection();
-    const call = async (id: any) => {
-      console.log(id);
+    const dc = peerConnection.createDataChannel("chanel");
+    let rdc: RTCDataChannel;
 
+    //todo methods
+    const call = async (id: any) => {
       const offer = await peerConnection.createOffer();
       await peerConnection.setLocalDescription(
         new RTCSessionDescription(offer)
       );
-
       socket.emit("call-user", {
         offer,
         to: id,
       });
     };
+    const Send = () => {
+      dc.send(sender.value);
+      socket.emit("text-data", {
+        text: sender.value,
+      });
+    };
+    const backFired = () => {
+      dc.send(sender.value);
+      socket.emit("text-data", {
+        text: sender.value,
+      });
+    };
 
+    //todo add rtc
     onMounted(() => {
       socket = io("http://localhost:4000", {
         transports: ["websocket"],
       });
 
+      //?=====================
       socket.on("update-user-list", (data: any) => {
         console.log(data);
 
@@ -42,8 +57,50 @@ export default defineComponent({
           }
         });
       });
+
+      //?====================
+      socket.on("remove-user", (data: any) => {
+        users.splice(users.indexOf(data.socketId), 1);
+      });
+
+      //?-====================================
+      socket.on("call-made", async (data: any) => {
+        await peerConnection.setRemoteDescription(
+          new RTCSessionDescription(data.offer)
+        );
+        const answer = await peerConnection.createAnswer();
+        await peerConnection.setLocalDescription(
+          new RTCSessionDescription(answer)
+        );
+
+        socket.emit("make-answer", {
+          answer,
+          to: data.socket,
+        });
+      });
+
+      //?==============================
+
+      socket.on("answer-made", async (data: any) => {
+        await peerConnection.setRemoteDescription(
+          new RTCSessionDescription(data.answer)
+        );
+        if (!isAlreadyCalling) {
+          call(data.socket);
+          isAlreadyCalling = true;
+        }
+      });
+
+      peerConnection.ondatachannel = (e) => {
+        rdc = e.channel;
+        rdc.onmessage = (e) => {
+          sender.value = e.data;
+        };
+        rdc.onopen = (e) => console.log("connected");
+      };
     });
-    return { sender, receiver, users, call };
+
+    return { sender, users, call, Send, backFired };
   },
 });
 </script>
@@ -63,19 +120,11 @@ export default defineComponent({
           <textarea
             name="sender"
             v-model="sender"
-            id=""
             cols="30"
             rows="10"
-          ></textarea>
-        </div>
-        <div class="col-sm-6 col-md-6 col-xs-12">
-          <p>From Receiver</p>
-          <textarea
-            name="sender"
-            v-model="receiver"
-            id=""
-            cols="30"
-            rows="10"
+            @input="Send"
+            @keyup.backSpace="backFired"
+            @keyup.delete="backFired"
           ></textarea>
         </div>
       </div>
