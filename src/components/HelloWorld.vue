@@ -26,7 +26,7 @@ export default defineComponent({
       socket.emit("call-user", {
         offer,
         to: id,
-      });
+      }); 
     };
     const Send = () => {
       dc.send(sender.value);
@@ -43,7 +43,7 @@ export default defineComponent({
 
     //todo add rtc
     onMounted(() => {
-      socket = io("http://localhost:4000", {
+      socket = io("https://soulsam480-node-ws-wrtc.glitch.me", {
         transports: ["websocket"],
       });
 
