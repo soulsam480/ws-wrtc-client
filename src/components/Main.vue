@@ -4,19 +4,21 @@ import { defineComponent, onMounted, reactive, ref } from 'vue';
 import { io } from 'socket.io-client';
 import { Socket } from 'socket.io-client/build/socket';
 import ListUsers from '@/components/ListUsers.vue';
-import { User } from '@/utils/models';
+import ChatArea from '@/components/ChatArea.vue';
+import { Message, User } from '@/utils/models';
 export default defineComponent({
   name: 'Main',
   components: {
     ListUsers,
+    ChatArea,
   },
   setup: () => {
     let socket: Socket;
-    const sender = ref('');
     const users = reactive<Array<User>>([]);
     const showLogin = ref(false);
     let isAlreadyCalling = false;
     const userName = ref('');
+    const messages = reactive<Array<Message>>([]);
     const submit = () => {
       socket.emit('add-user', {
         name: userName.value,
@@ -42,6 +44,7 @@ export default defineComponent({
     let rdc: RTCDataChannel;
 
     //todo methods
+    //todo call an user
     const call = async (id: any) => {
       const offer = await peerConnection.createOffer();
       await peerConnection.setLocalDescription(
@@ -49,20 +52,19 @@ export default defineComponent({
       );
       socket.emit('call-user', {
         offer,
+        user: {
+          name: userName.value,
+          id: socket.id,
+        },
         to: id,
       });
+      console.log(socket.id);
     };
-    const Send = () => {
-      dc.send(sender.value);
-      socket.emit('text-data', {
-        text: sender.value,
-      });
-    };
-    const backFired = () => {
-      dc.send(sender.value);
-      socket.emit('text-data', {
-        text: sender.value,
-      });
+    //todo send message on rtc
+    const send = (val: Message) => {
+      (val.at = new Date().toISOString()), (val.from = userName.value);
+      messages.push(val);
+      dc.send(JSON.stringify(val));
     };
 
     //todo add rtc
@@ -79,9 +81,7 @@ export default defineComponent({
       //?=====================
       socket.on('update-user-list', (data: any) => {
         data.users.forEach((el: any) => {
-          console.log(data);
-
-          if (!users.find((eli) => eli === el)) {
+          if (!users.find((eli) => eli.id === el.id)) {
             users.push(el);
           }
         });
@@ -90,24 +90,29 @@ export default defineComponent({
       //?====================
       socket.on('remove-user', (data: any) => {
         console.log(`user ${data.socketId} is disconnected.`);
-        users.splice(users.indexOf(data.socketId), 1);
+        users.splice(
+          users.findIndex((el) => el.id === data.socketId),
+          1,
+        );
       });
 
       //?-====================================
       socket.on('call-made', async (data: any) => {
-        window.alert(`${data.socket} is calling`);
-        await peerConnection.setRemoteDescription(
-          new RTCSessionDescription(data.offer),
-        );
-        const answer = await peerConnection.createAnswer();
-        await peerConnection.setLocalDescription(
-          new RTCSessionDescription(answer),
-        );
+        const res = confirm(`${data.user.name} is calling! accept ?`);
 
-        socket.emit('make-answer', {
-          answer,
-          to: data.socket,
-        });
+        if (res) {
+          await peerConnection.setRemoteDescription(
+            new RTCSessionDescription(data.offer),
+          );
+          const answer = await peerConnection.createAnswer();
+          await peerConnection.setLocalDescription(
+            new RTCSessionDescription(answer),
+          );
+          socket.emit('make-answer', {
+            answer,
+            to: data.user.id,
+          });
+        }
       });
 
       //?==============================
@@ -121,27 +126,29 @@ export default defineComponent({
           isAlreadyCalling = true;
         }
       });
-
-      peerConnection.ondatachannel = (e) => {
-        rdc = e.channel;
-        rdc.onmessage = (e) => {
-          sender.value = e.data;
-        };
-        rdc.onopen = (e) => {
-          window.alert('connected');
-        };
-      };
     });
+    //?=============Peer data tranfer manager==================
+    peerConnection.ondatachannel = (e) => {
+      rdc = e.channel;
 
+      rdc.onopen = () => {
+        window.alert('connected');
+      };
+
+      rdc.onmessage = (e) => {
+        console.log(e.data);
+        messages.push(JSON.parse(e.data));
+        console.log(messages);
+      };
+    };
     return {
-      sender,
       users,
       call,
-      Send,
-      backFired,
+      send,
       showLogin,
       submit,
       userName,
+      messages,
     };
   },
 });
@@ -165,6 +172,7 @@ export default defineComponent({
                   name="test"
                   placeholder="Your name for chat"
                   v-model="userName"
+                  @keyup.enter="submit"
                 />
               </div>
               <button class="btn btn-cyan" @click="submit">Submit</button>
@@ -173,16 +181,15 @@ export default defineComponent({
         </div>
       </div>
       <div class="row" v-else>
-        <div class="col-sm-4">
-          <ListUsers :list="users" />
+        <div class="col-sm-3 sidebar">
+          <ListUsers :list="users" :me="userName" @call-user="call($event)" />
         </div>
-        <div class="col-sm-8">aa</div>
+        <div class="col-sm-9">
+          <ChatArea @send-message="send($event)" :messages="messages" :me="userName" />
+        </div>
       </div>
       <!-- <div>
-        <div v-for="u in users" :key="u">
-          <button class="btn" @click="call(u)">{{ u }}</button>
-        </div>
-      </div>
+
       <div class="row">
         <div class="col-sm-6 col-md-6 col-xs-12">
           <p>From sender</p>
@@ -205,8 +212,20 @@ export default defineComponent({
 .container {
   border-radius: 5px;
   box-shadow: 0 0.1px 5px 0.5px rgb(211, 211, 211);
+  background-color: mix(white, cyan, 40%);
+  height: 500px;
+  .row {
+    height: 100%;
+    .col-sm-9 {
+      position: relative;
+    }
+  }
 }
 .login-form {
   padding: 10px;
+}
+.sidebar {
+  padding: 0;
+  border-right: 1px solid rgb(209, 209, 209);
 }
 </style>

@@ -16,4 +16,5 @@ export default defineComponent({
 
 <style lang="scss">
 @import url('~shoyo/dist/main.css');
+@import '@/styles/app.scss';
 </style>

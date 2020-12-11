@@ -1,8 +1,7 @@
 export interface Message {
   data: string;
-  from: string;
-  to: string;
-  at: string;
+  from?: string;
+  at?: string;
 }
 
 export interface User {
