@@ -9,19 +9,23 @@ export default defineComponent({
       required: true,
     },
     me: String,
+    isCalling: Boolean,
   },
-  setup() {
+  setup(props, { emit }) {
     const message = reactive<Message>({
       data: '',
     });
-
-    return { message };
+    const emitMessage = () => {
+      emit('send-message', message);
+      message.data = '';
+    };
+    return { message, emitMessage };
   },
 });
 </script>
 
 <template>
-  <div>
+  <div class="main" v-if="isCalling">
     <div class="messages">
       <div
         v-for="m in messages"
@@ -39,25 +43,40 @@ export default defineComponent({
         type="text"
         class="inputbox"
         v-model="message.data"
-        @keyup.enter="$emit('send-message', message)"
+        @keyup.enter="emitMessage"
       />
+      <button class="send btn btn-blue" @click="emitMessage">send</button>
     </div>
+  </div>
+  <div v-else>
+    <br /><br /><br />
+    <center><h4>Please Connect to someone</h4></center>
   </div>
 </template>
 
 <style lang="scss" scoped>
+.main {
+  display: flex;
+  flex-direction: column-reverse;
+  height: 100%;
+  width: 100%;
+}
 .messages {
   padding: 10px 0;
-  .left {
+  margin-bottom: 30px;
+  .left,
+  .right {
+    padding: 5px;
+    display: flex;
+    width: 100%;
     span {
       background-color: mix(black, cyan, 10%);
+      padding: 5px 7px;
+      border-radius: 2px;
     }
   }
   .right {
-    float: right;
-    span {
-      background-color: mix(black, cyan, 15%);
-    }
+    flex-direction: row-reverse;
   }
 }
 .type {
@@ -77,6 +96,11 @@ export default defineComponent({
       color: rgb(107, 107, 107);
       font-size: inherit;
     }
+  }
+  .send {
+    position: absolute;
+    right: 5px;
+    bottom: 5px;
   }
 }
 </style>

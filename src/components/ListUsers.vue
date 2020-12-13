@@ -5,6 +5,7 @@ import { toRef } from 'vue';
 declare const props: {
   list: Array<User>;
   me: string;
+  connectedTo: string;
 };
 
 declare const emits: ['call-user'];
@@ -18,6 +19,9 @@ export const userList = toRef(props, 'list');
       <h3>Live Users</h3>
       <span
         >me: <u>{{ me }}</u></span
+      ><br />
+      <span v-if="connectedTo"
+        >with:<u>{{ connectedTo }}</u></span
       >
     </div>
     <div v-for="u in userList" :key="u.id" @click="$emit('call-user', u.id)">

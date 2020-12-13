@@ -2,7 +2,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { defineComponent, onMounted, reactive, ref } from 'vue';
 import { io } from 'socket.io-client';
-import { Socket } from 'socket.io-client/build/socket';
 import ListUsers from '@/components/ListUsers.vue';
 import ChatArea from '@/components/ChatArea.vue';
 import { Message, User } from '@/utils/models';
@@ -12,25 +11,12 @@ export default defineComponent({
     ListUsers,
     ChatArea,
   },
-  setup: () => {
-    let socket: Socket;
-    const users = reactive<Array<User>>([]);
-    const showLogin = ref(false);
-    let isAlreadyCalling = false;
-    const userName = ref('');
-    const messages = reactive<Array<Message>>([]);
-    const submit = () => {
-      socket.emit('add-user', {
-        name: userName.value,
-      });
-      showLogin.value = !showLogin.value;
-    };
+  setup() {
     const wsUrl =
       process.env.NODE_ENV === 'production'
         ? 'https://soulsam480-node-ws-wrtc.glitch.me'
         : 'http://localhost:3000';
-    //todo rtc
-    const { RTCPeerConnection, RTCSessionDescription } = window;
+    let rdc: RTCDataChannel;
     const config = {
       iceServers: [
         {
@@ -38,12 +24,28 @@ export default defineComponent({
         },
       ],
     };
-
+    const { RTCPeerConnection, RTCSessionDescription } = window;
     const peerConnection = new RTCPeerConnection(config);
     const dc = peerConnection.createDataChannel('chanel');
-    let rdc: RTCDataChannel;
+    const socket = io(wsUrl, {
+      transports: ['websocket'],
+    });
 
-    //todo methods
+    //?====================================================
+
+    const users = reactive<Array<User>>([]);
+    const showLogin = ref(false);
+    const isAlreadyCalling = ref(false);
+    const userName = ref('');
+    const remoteUser = ref('');
+    const messages = reactive<Array<Message>>([]);
+    const submit = () => {
+      socket.emit('add-user', {
+        name: userName.value,
+      });
+      showLogin.value = !showLogin.value;
+    };
+
     //todo call an user
     const call = async (id: any) => {
       const offer = await peerConnection.createOffer();
@@ -58,21 +60,17 @@ export default defineComponent({
         },
         to: id,
       });
-      console.log(socket.id);
     };
     //todo send message on rtc
     const send = (val: Message) => {
       (val.at = new Date().toISOString()), (val.from = userName.value);
-      messages.push(val);
+      messages.push({ ...val });
       dc.send(JSON.stringify(val));
     };
 
     //todo add rtc
     onMounted(() => {
       //todo main socket connection
-      socket = io(wsUrl, {
-        transports: ['websocket'],
-      });
 
       socket.on('connect', () => {
         showLogin.value = !showLogin.value;
@@ -99,7 +97,6 @@ export default defineComponent({
       //?-====================================
       socket.on('call-made', async (data: any) => {
         const res = confirm(`${data.user.name} is calling! accept ?`);
-
         if (res) {
           await peerConnection.setRemoteDescription(
             new RTCSessionDescription(data.offer),
@@ -111,7 +108,13 @@ export default defineComponent({
           socket.emit('make-answer', {
             answer,
             to: data.user.id,
+            user: {
+              name: userName.value,
+              id: socket.id,
+            },
           });
+          remoteUser.value = data.user.name;
+          isAlreadyCalling.value = true;
         }
       });
 
@@ -121,13 +124,13 @@ export default defineComponent({
         await peerConnection.setRemoteDescription(
           new RTCSessionDescription(data.answer),
         );
-        if (!isAlreadyCalling) {
+        if (!isAlreadyCalling.value) {
           call(data.socket);
-          isAlreadyCalling = true;
+          remoteUser.value = data.user.name;
+          isAlreadyCalling.value = true;
         }
       });
     });
-    //?=============Peer data tranfer manager==================
     peerConnection.ondatachannel = (e) => {
       rdc = e.channel;
 
@@ -136,11 +139,10 @@ export default defineComponent({
       };
 
       rdc.onmessage = (e) => {
-        console.log(e.data);
         messages.push(JSON.parse(e.data));
-        console.log(messages);
       };
     };
+    //?=============Peer data tranfer manager==================
     return {
       users,
       call,
@@ -149,6 +151,8 @@ export default defineComponent({
       submit,
       userName,
       messages,
+      isAlreadyCalling,
+      remoteUser,
     };
   },
 });
@@ -157,56 +161,68 @@ export default defineComponent({
 <template>
   <div>
     <center>
-      <h1>WS RTC client</h1>
+      <h1>Simple WebRTC chat</h1>
+      <h3>
+        Only 1-1 chat is currently possible. i.e. you can't connect to somebody
+        between an ongoing chat.
+      </h3>
+      <h4>Best Viewd on desktop 😟😟😟</h4>
     </center>
     <div class="container c-lg">
       <div v-if="showLogin">
         <div class="row center-xs center-md">
           <div class="col-sm-6">
-            <div class="login-form">
-              <div class="form-group">
-                <label for="test">Name</label>
-                <input
-                  type="text"
-                  class="input"
-                  name="test"
-                  placeholder="Your name for chat"
-                  v-model="userName"
-                  @keyup.enter="submit"
-                />
+            <div class="login-wrap">
+              <br />
+              <h3>To get started please enter a name for your alias.</h3>
+              <div class="login-form">
+                <div class="form-group">
+                  <label for="test">Name</label>
+                  <input
+                    type="text"
+                    class="input"
+                    name="test"
+                    placeholder="Your name for chat"
+                    v-model="userName"
+                    @keyup.enter="submit"
+                  />
+                </div>
+                <button class="btn btn-blue" @click="submit">Submit</button>
               </div>
-              <button class="btn btn-cyan" @click="submit">Submit</button>
+              <h4>Notes</h4>
+              <ul>
+                <li>Experimental</li>
+                <li>
+                  RTC peerConnection is some sort of secure. But not secure
+                  entriely.
+                </li>
+                <li>Data is not persisted. Destroyed after refresh</li>
+                <li>Definitely not meant for sensitive conversation.</li>
+              </ul>
             </div>
           </div>
         </div>
       </div>
       <div class="row" v-else>
-        <div class="col-sm-3 sidebar">
-          <ListUsers :list="users" :me="userName" @call-user="call($event)" />
+        <div class="col-sm-3 col-xs-12 sidebar">
+          <ListUsers
+            :connected-to="remoteUser"
+            :list="users"
+            :me="userName"
+            @call-user="call($event)"
+          />
         </div>
-        <div class="col-sm-9">
-          <ChatArea @send-message="send($event)" :messages="messages" :me="userName" />
+        <div class="col-sm-9 col-xs-12">
+          <ChatArea
+            @send-message="send($event)"
+            :messages="messages"
+            :me="userName"
+            :is-calling="isAlreadyCalling"
+          />
         </div>
       </div>
-      <!-- <div>
-
-      <div class="row">
-        <div class="col-sm-6 col-md-6 col-xs-12">
-          <p>From sender</p>
-          <textarea
-            name="sender"
-            v-model="sender"
-            cols="30"
-            rows="10"
-            @input="Send"
-            @keyup.backSpace="backFired"
-            @keyup.delete="backFired"
-          ></textarea>
-        </div>
-      </div> -->
-    </div>
-  </div></template
->
+    </div></div
+></template>
 
 <style lang="scss" scoped>
 .container {
@@ -220,6 +236,9 @@ export default defineComponent({
       position: relative;
     }
   }
+  .login-wrap {
+    padding: 15px;
+  }
 }
 .login-form {
   padding: 10px;
@@ -227,5 +246,8 @@ export default defineComponent({
 .sidebar {
   padding: 0;
   border-right: 1px solid rgb(209, 209, 209);
+  @media (max-width: 768px) {
+    border-bottom: 1px solid rgb(209, 209, 209);
+  }
 }
 </style>
