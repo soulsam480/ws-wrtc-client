@@ -1,16 +1,20 @@
-<script lang="ts" setup="props">
+<script lang="ts">
+import { defineComponent, toRef, PropType } from 'vue';
 import { User } from '@/utils/models';
-import { toRef } from 'vue';
-
-declare const props: {
-  list: Array<User>;
-  me: string;
-  connectedTo: string;
-};
-
-declare const emits: ['call-user'];
-
-export const userList = toRef(props, 'list');
+export default defineComponent({
+  props: {
+    list: Object as PropType<Array<User>>,
+    me: String,
+    connectedTo: String,
+  },
+  emits: ['call-user'],
+  setup(props) {
+    const userList = toRef(props, 'list');
+    return {
+      userList,
+    };
+  },
+});
 </script>
 
 <template>
