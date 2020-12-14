@@ -34,7 +34,7 @@ export default defineComponent({
     //?====================================================
 
     const users = reactive<Array<User>>([]);
-    const showLogin = ref(false);
+    const showLogin = ref(true);
     const isAlreadyCalling = ref(false);
     const userName = ref('');
     const remoteUser = ref('');
@@ -70,12 +70,10 @@ export default defineComponent({
 
     //todo add rtc
     onMounted(() => {
-      //todo main socket connection
-
       socket.on('connect', () => {
-        showLogin.value = !showLogin.value;
+        window.alert('server connected');
       });
-
+      //todo main socket connection
       //?=====================
       socket.on('update-user-list', (data: any) => {
         data.users.forEach((el: any) => {
@@ -185,11 +183,13 @@ export default defineComponent({
                     placeholder="Your name for chat"
                     v-model="userName"
                     @keyup.enter="submit"
+                    autofocus
                   />
                 </div>
                 <button class="btn btn-blue" @click="submit">Submit</button>
               </div>
-              <h4>Notes</h4>
+              <br>
+              <h4>🔰 Few notes before jumping in 🔰</h4>
               <ul>
                 <li>Experimental</li>
                 <li>
@@ -221,8 +221,23 @@ export default defineComponent({
           />
         </div>
       </div>
-    </div></div
-></template>
+    </div>
+    <br />
+    <center>
+      <h3>
+        Star on GitHub ::
+        <b>
+          <a href="https://github.com/soulsam480/ws-wrtc-client"> client repo</a
+          ><span> :/:</span>
+          <a href="https://github.com/soulsam480/node-ws-wrtc">
+            Server repo</a
+          ></b
+        >
+      </h3>
+      <h3><a href="https://sambitsahoo.com">My Blog</a></h3>
+    </center>
+  </div></template
+>
 
 <style lang="scss" scoped>
 .container {

@@ -28,6 +28,7 @@ export default defineComponent({
         >with:<u>{{ connectedTo }}</u></span
       >
     </div>
+    <hr />
     <div v-for="u in userList" :key="u.id" @click="$emit('call-user', u.id)">
       <span> {{ u.name }} </span> <br />
       <small> ID: {{ u.id }} </small>
