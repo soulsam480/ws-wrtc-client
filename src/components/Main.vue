@@ -12,10 +12,10 @@ export default defineComponent({
     ChatArea,
   },
   setup() {
-    const wsUrl =
-      process.env.NODE_ENV === 'production'
+    const wsUrl = 'https://soulsam480-node-ws-wrtc.glitch.me';
+    /*       process.env.NODE_ENV === 'production'
         ? 'https://soulsam480-node-ws-wrtc.glitch.me'
-        : 'http://localhost:3000';
+        : 'http://localhost:3000'; */
     let rdc: RTCDataChannel;
     const config = {
       iceServers: [
@@ -36,6 +36,7 @@ export default defineComponent({
     const users = reactive<Array<User>>([]);
     const showLogin = ref(true);
     const isAlreadyCalling = ref(false);
+    const showHam = ref(false);
     const userName = ref('');
     const remoteUser = ref('');
     const messages = reactive<Array<Message>>([]);
@@ -151,6 +152,7 @@ export default defineComponent({
       messages,
       isAlreadyCalling,
       remoteUser,
+      showHam,
     };
   },
 });
@@ -188,7 +190,7 @@ export default defineComponent({
                 </div>
                 <button class="btn btn-blue" @click="submit">Submit</button>
               </div>
-              <br>
+              <br />
               <h4>🔰 Few notes before jumping in 🔰</h4>
               <ul>
                 <li>Experimental</li>
@@ -205,14 +207,19 @@ export default defineComponent({
       </div>
       <div class="row" v-else>
         <div class="col-sm-3 col-xs-12 sidebar">
+          <center class="ham">
+            <span @click="showHam = !showHam">☰</span>
+          </center>
           <ListUsers
             :connected-to="remoteUser"
             :list="users"
             :me="userName"
             @call-user="call($event)"
+            :show-ham="showHam"
+            @close-side="showHam = !showHam"
           />
         </div>
-        <div class="col-sm-9 col-xs-12">
+        <div class="col-sm-9 col-xs-12 chat">
           <ChatArea
             @send-message="send($event)"
             :messages="messages"
@@ -244,11 +251,13 @@ export default defineComponent({
   border-radius: 5px;
   box-shadow: 0 0.1px 5px 0.5px rgb(211, 211, 211);
   background-color: mix(white, cyan, 40%);
-  height: 500px;
+  height: 500px !important;
   .row {
     height: 100%;
-    .col-sm-9 {
+    padding: 10px 0;
+    .chat {
       position: relative;
+      height: 100%;
     }
   }
   .login-wrap {
@@ -259,10 +268,24 @@ export default defineComponent({
   padding: 10px;
 }
 .sidebar {
+  position: relative;
   padding: 0;
-  border-right: 1px solid rgb(209, 209, 209);
-  @media (max-width: 768px) {
-    border-bottom: 1px solid rgb(209, 209, 209);
+  @media (min-width: 768px) {
+    border-right: 1px solid rgb(209, 209, 209);
+    .ham {
+      display: none;
+    }
+  }
+  .ham {
+    position: absolute;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    span {
+      padding: 6px 8px;
+      background-color: mix(black, cyan, 10%);
+      border-radius: 1000px;
+    }
   }
 }
 </style>

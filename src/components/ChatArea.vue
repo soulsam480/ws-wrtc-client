@@ -1,5 +1,5 @@
 <script lang="ts">
-import { defineComponent, PropType, reactive } from 'vue';
+import { defineComponent, PropType, reactive, toRef, watch } from 'vue';
 import { Message } from '@/utils/models';
 export default defineComponent({
   name: 'ChatArea',
@@ -12,12 +12,25 @@ export default defineComponent({
     isCalling: Boolean,
   },
   setup(props, { emit }) {
+    const messes = toRef(props, 'messages');
     const message = reactive<Message>({
       data: '',
     });
+    watch(
+      messes,
+      (o, n) => {
+        const mesContainer = document.getElementById('message') as HTMLElement;
+        mesContainer.scrollTop = mesContainer.scrollHeight;
+      },
+      {
+        deep: true,
+      },
+    );
     const emitMessage = () => {
       emit('send-message', message);
       message.data = '';
+      const mesContainer = document.getElementById('message') as HTMLElement;
+      mesContainer.scrollTop = mesContainer.scrollHeight;
     };
     return { message, emitMessage };
   },
@@ -25,8 +38,8 @@ export default defineComponent({
 </script>
 
 <template>
-  <div class="main" v-if="isCalling">
-    <div class="messages">
+  <div v-if="isCalling" class="parent">
+    <div class="messages" id="message">
       <div
         v-for="m in messages"
         :key="m.data"
@@ -45,7 +58,7 @@ export default defineComponent({
         v-model="message.data"
         @keyup.enter="emitMessage"
       />
-      <button class="send btn btn-blue" @click="emitMessage">send</button>
+      <button class=" btn btn-blue" @click="emitMessage">send</button>
     </div>
   </div>
   <div v-else>
@@ -55,15 +68,29 @@ export default defineComponent({
 </template>
 
 <style lang="scss" scoped>
-.main {
+.parent {
   display: flex;
-  flex-direction: column-reverse;
+  flex-direction: column;
+  justify-content: flex-end;
   height: 100%;
-  width: 100%;
 }
 .messages {
-  padding: 10px 0;
-  margin-bottom: 30px;
+  overflow-y: auto;
+  &::-webkit-scrollbar {
+    width: 5px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: #f1f1f1;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: #888;
+  }
+
+  &::-webkit-scrollbar-thumb:hover {
+    background: #555;
+  }
   .left,
   .right {
     padding: 5px;
@@ -80,12 +107,14 @@ export default defineComponent({
   }
 }
 .type {
+  margin: 5px 0 0 0;
+
+  position: relative;
+  display: flex;
+  align-items: center;
   .inputbox {
     padding: 10px 5px;
     width: 100%;
-    position: absolute;
-    left: 0;
-    bottom: 0;
     border: none;
     outline: none;
     background-color: mix(black, cyan, 10%);
@@ -97,10 +126,9 @@ export default defineComponent({
       font-size: inherit;
     }
   }
-  .send {
+  .btn {
     position: absolute;
     right: 5px;
-    bottom: 5px;
   }
 }
 </style>
