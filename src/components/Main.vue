@@ -39,6 +39,7 @@ export default defineComponent({
     const showHam = ref(false);
     const userName = ref('');
     const remoteUser = ref('');
+    const isConnected = ref(false);
     const messages = reactive<Array<Message>>([]);
     const submit = () => {
       socket.emit('add-user', {
@@ -72,7 +73,7 @@ export default defineComponent({
     //todo add rtc
     onMounted(() => {
       socket.on('connect', () => {
-        window.alert('server connected');
+        isConnected.value = true;
       });
       //todo main socket connection
       //?=====================
@@ -153,13 +154,14 @@ export default defineComponent({
       isAlreadyCalling,
       remoteUser,
       showHam,
+      isConnected,
     };
   },
 });
 </script>
 
 <template>
-  <div>
+  <div v-if="isConnected">
     <center>
       <h1>Simple WebRTC chat</h1>
       <h3>
@@ -243,10 +245,21 @@ export default defineComponent({
       </h3>
       <h3><a href="https://sambitsahoo.com">My Blog</a></h3>
     </center>
-  </div></template
->
+  </div>
+  <div v-else>
+    <h2 class="connect-banner">
+      Connecting to server........
+      <br />
+      This might take a few minutes !!!
+    </h2>
+  </div>
+</template>
 
 <style lang="scss" scoped>
+.connect-banner {
+  padding-top: 50px;
+  text-align: center;
+}
 .container {
   border-radius: 5px;
   box-shadow: 0 0.1px 5px 0.5px rgb(211, 211, 211);
