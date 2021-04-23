@@ -63,7 +63,7 @@ export default defineComponent({
   </div>
   <div v-else>
     <br /><br /><br />
-    <center><h4>Please Connect to someone</h4></center>
+    <div class="text-center"><h4>Please Connect to someone</h4></div>
   </div>
 </template>
 
@@ -126,7 +126,7 @@ export default defineComponent({
       font-size: inherit;
     }
   }
-  .btn {
+  .btn-blue {
     position: absolute;
     right: 5px;
   }

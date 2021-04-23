@@ -5,6 +5,7 @@ import { io } from 'socket.io-client';
 import ListUsers from '@/components/ListUsers.vue';
 import ChatArea from '@/components/ChatArea.vue';
 import { Message, User } from '@/utils/models';
+import Peer from 'simple-peer';
 export default defineComponent({
   name: 'Main',
   components: {
@@ -12,11 +13,10 @@ export default defineComponent({
     ChatArea,
   },
   setup() {
-    const wsUrl = 'https://soulsam480-node-ws-wrtc.glitch.me';
-    /*       process.env.NODE_ENV === 'production'
+    const wsUrl =
+      process.env.NODE_ENV === 'production'
         ? 'https://soulsam480-node-ws-wrtc.glitch.me'
-        : 'http://localhost:3000'; */
-    let rdc: RTCDataChannel;
+        : 'http://localhost:3000';
     const config = {
       iceServers: [
         {
@@ -24,59 +24,137 @@ export default defineComponent({
         },
       ],
     };
-    const { RTCPeerConnection, RTCSessionDescription } = window;
-    const peerConnection = new RTCPeerConnection(config);
-    const dc = peerConnection.createDataChannel('chanel');
+    let peerConnection = ref<Peer.Instance | null>(null).value;
+    const users = reactive<Array<User>>([]);
+    const messages = reactive<Array<Message>>([]);
     const socket = io(wsUrl, {
       transports: ['websocket'],
     });
 
-    //?====================================================
-
-    const users = reactive<Array<User>>([]);
     const showLogin = ref(true);
     const isAlreadyCalling = ref(false);
     const showHam = ref(false);
     const userName = ref('');
     const remoteUser = ref('');
     const isConnected = ref(false);
-    const messages = reactive<Array<Message>>([]);
+    const stream = ref<MediaStream | null>(null);
+    const isMuted = ref(true);
     const submit = () => {
       socket.emit('add-user', {
         name: userName.value,
       });
       showLogin.value = !showLogin.value;
     };
+    navigator.mediaDevices
+      .getUserMedia({
+        audio: true,
+      })
+      .then((media) => {
+        stream.value = media;
+        stream.value.getAudioTracks()[0].enabled = false;
+      })
+      .catch((err) => console.log(err));
 
-    //todo call an user
-    const call = async (id: any) => {
-      const offer = await peerConnection.createOffer();
-      await peerConnection.setLocalDescription(
-        new RTCSessionDescription(offer),
-      );
-      socket.emit('call-user', {
-        offer,
-        user: {
-          name: userName.value,
-          id: socket.id,
-        },
-        to: id,
+    function toggleAudio() {
+      (stream.value as MediaStream).getAudioTracks()[0].enabled = !(stream.value as MediaStream).getAudioTracks()[0]
+        .enabled;
+      isMuted.value = !isMuted.value;
+    }
+    function closeCall() {
+      peerConnection?.destroy();
+    }
+    function createSender(id: string) {
+      peerConnection = new Peer({
+        config: config,
+        initiator: true,
+        trickle: false,
+        stream: stream.value as MediaStream,
       });
-    };
-    //todo send message on rtc
-    const send = (val: Message) => {
-      (val.at = new Date().toISOString()), (val.from = userName.value);
+      peerConnection?.on('signal', (data) => {
+        socket.emit('call-user', {
+          offer: JSON.stringify(data),
+          user: {
+            name: userName.value,
+            id: socket.id,
+          },
+          to: id,
+        });
+      });
+
+      peerConnection?.on('data', (data) => {
+        messages.push(JSON.parse(new TextDecoder().decode(data)));
+      });
+      peerConnection.on('close', () => {
+        isAlreadyCalling.value = false;
+        remoteUser.value = '';
+        isMuted.value = true;
+        (stream.value as MediaStream).getAudioTracks()[0].enabled = false;
+      });
+      peerConnection?.on('stream', (stream) => {
+        const audio = document.querySelector('audio') as HTMLAudioElement;
+        if ('srcObject' in audio) {
+          audio.srcObject = stream;
+        } else {
+          (audio as any).src = window.URL.createObjectURL(stream); // for older browsers
+        }
+        audio.play();
+      });
+    }
+    function createReceiver(data: any) {
+      const peer = new Peer({
+        config: config,
+        trickle: false,
+        stream: stream.value as MediaStream,
+      });
+      peerConnection = peer;
+      peerConnection?.signal(data.offer);
+      peerConnection?.on('signal', (dat) => {
+        socket.emit('make-answer', {
+          answer: JSON.stringify(dat),
+          to: data.user.id,
+          user: {
+            name: userName.value,
+            id: socket.id,
+          },
+        });
+        remoteUser.value = data.user.name;
+        isAlreadyCalling.value = true;
+      });
+      peerConnection?.on('data', (data) => {
+        messages.push(JSON.parse(new TextDecoder().decode(data)));
+      });
+      peerConnection?.on('connect', () => {
+        console.log('connected');
+        window.alert('connected!');
+      });
+      peerConnection.on('close', () => {
+        isAlreadyCalling.value = false;
+        remoteUser.value = '';
+        isMuted.value = true;
+        (stream.value as MediaStream).getAudioTracks()[0].enabled = false;
+      });
+      peerConnection?.on('stream', (stream) => {
+        const audio = document.querySelector('audio') as HTMLAudioElement;
+        if ('srcObject' in audio) {
+          audio.srcObject = stream;
+        } else {
+          (audio as any).src = window.URL.createObjectURL(stream); // for older browsers
+        }
+        audio.play();
+      });
+    }
+    const sendMessage = (val: Message) => {
+      val.at = new Date().toISOString();
+      val.from = userName.value;
       messages.push({ ...val });
-      dc.send(JSON.stringify(val));
+      peerConnection?.send(JSON.stringify(val));
     };
 
-    //todo add rtc
     onMounted(() => {
       socket.on('connect', () => {
         isConnected.value = true;
       });
-      //todo main socket connection
-      //?=====================
+
       socket.on('update-user-list', (data: any) => {
         data.users.forEach((el: any) => {
           if (!users.find((eli) => eli.id === el.id)) {
@@ -85,7 +163,6 @@ export default defineComponent({
         });
       });
 
-      //?====================
       socket.on('remove-user', (data: any) => {
         console.log(`user ${data.socketId} is disconnected.`);
         users.splice(
@@ -94,59 +171,27 @@ export default defineComponent({
         );
       });
 
-      //?-====================================
       socket.on('call-made', async (data: any) => {
         const res = confirm(`${data.user.name} is calling! accept ?`);
         if (res) {
-          await peerConnection.setRemoteDescription(
-            new RTCSessionDescription(data.offer),
-          );
-          const answer = await peerConnection.createAnswer();
-          await peerConnection.setLocalDescription(
-            new RTCSessionDescription(answer),
-          );
-          socket.emit('make-answer', {
-            answer,
-            to: data.user.id,
-            user: {
-              name: userName.value,
-              id: socket.id,
-            },
-          });
-          remoteUser.value = data.user.name;
-          isAlreadyCalling.value = true;
+          createReceiver(data);
         }
       });
-
-      //?==============================
 
       socket.on('answer-made', async (data: any) => {
-        await peerConnection.setRemoteDescription(
-          new RTCSessionDescription(data.answer),
-        );
-        if (!isAlreadyCalling.value) {
-          call(data.socket);
+        peerConnection?.signal(data.answer);
+        peerConnection?.on('connect', async () => {
+          console.log('connected');
+          window.alert('connected!');
           remoteUser.value = data.user.name;
           isAlreadyCalling.value = true;
-        }
+        });
       });
     });
-    peerConnection.ondatachannel = (e) => {
-      rdc = e.channel;
 
-      rdc.onopen = () => {
-        window.alert('connected');
-      };
-
-      rdc.onmessage = (e) => {
-        messages.push(JSON.parse(e.data));
-      };
-    };
-    //?=============Peer data tranfer manager==================
     return {
       users,
-      call,
-      send,
+      sendMessage,
       showLogin,
       submit,
       userName,
@@ -155,6 +200,10 @@ export default defineComponent({
       remoteUser,
       showHam,
       isConnected,
+      createSender,
+      isMuted,
+      toggleAudio,
+      closeCall,
     };
   },
 });
@@ -162,14 +211,18 @@ export default defineComponent({
 
 <template>
   <div v-if="isConnected">
-    <center>
+    <div class="text-center">
       <h1>Simple WebRTC chat</h1>
+      <h1 class="indigo">
+        Unmute yourself after connecting to start voice call !!
+      </h1>
       <h3>
         Only 1-1 chat is currently possible. i.e. you can't connect to somebody
         between an ongoing chat.
       </h3>
+      <h3 class="red"><b>Close an ongoing call to start a new one.</b></h3>
       <h4>Best Viewd on desktop 😟😟😟</h4>
-    </center>
+    </div>
     <div class="container c-lg">
       <div v-if="showLogin">
         <div class="row center-xs center-md">
@@ -209,21 +262,24 @@ export default defineComponent({
       </div>
       <div class="row" v-else>
         <div class="col-sm-3 col-xs-12 sidebar">
-          <center class="ham">
+          <span class="ham text-center">
             <span @click="showHam = !showHam">☰</span>
-          </center>
+          </span>
           <ListUsers
             :connected-to="remoteUser"
             :list="users"
             :me="userName"
-            @call-user="call($event)"
+            @call-user="createSender($event)"
             :show-ham="showHam"
             @close-side="showHam = !showHam"
+            :isMuted="isMuted"
+            @toggle-mute="toggleAudio"
+            @close-call="closeCall"
           />
         </div>
         <div class="col-sm-9 col-xs-12 chat">
           <ChatArea
-            @send-message="send($event)"
+            @send-message="sendMessage($event)"
             :messages="messages"
             :me="userName"
             :is-calling="isAlreadyCalling"
@@ -232,7 +288,7 @@ export default defineComponent({
       </div>
     </div>
     <br />
-    <center>
+    <div class="text-center">
       <h3>
         Star on GitHub ::
         <b>
@@ -244,7 +300,9 @@ export default defineComponent({
         >
       </h3>
       <h3><a href="https://sambitsahoo.com">My Blog</a></h3>
-    </center>
+    </div>
+    <!-- <video></video> -->
+    <audio hidden aria-hidden="true"></audio>
   </div>
   <div v-else>
     <h2 class="connect-banner">
@@ -256,6 +314,9 @@ export default defineComponent({
 </template>
 
 <style lang="scss" scoped>
+.text-center {
+  text-align: center;
+}
 .connect-banner {
   padding-top: 50px;
   text-align: center;

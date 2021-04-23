@@ -4,7 +4,9 @@ html {
   font-size: 16px;
   height: 100%;
 }
-
+.text-center {
+  text-align: center;
+}
 .input {
   background-color: mix(black, cyan, 10%);
   font-family: 'EB Garamond', serif !important;

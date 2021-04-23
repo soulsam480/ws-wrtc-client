@@ -7,8 +7,9 @@ export default defineComponent({
     me: String,
     connectedTo: String,
     showHam: Boolean,
+    isMuted: Boolean,
   },
-  emits: ['call-user', 'close-side'],
+  emits: ['call-user', 'close-side', 'toggle-mute', 'close-call'],
   setup(props) {
     const userList = toRef(props, 'list');
     return {
@@ -25,6 +26,22 @@ export default defineComponent({
         Live Users
         <span style="float: right" @click="$emit('close-side')">X</span>
       </h3>
+      <button
+        class="btn btn-indigo"
+        v-if="connectedTo"
+        @click="$emit('toggle-mute')"
+      >
+        {{ isMuted ? 'Unmute' : 'Mute' }}
+      </button>
+      <button
+        style="margin-left:5px"
+        class="btn btn-red"
+        v-if="connectedTo"
+        @click="$emit('close-call')"
+      >
+        Close
+      </button>
+      <br />
       <span
         >me: <u>{{ me }}</u></span
       ><br />
@@ -90,3 +107,4 @@ h3 {
   pointer-events: none;
 }
 </style>
+v-if="connectedTo"
