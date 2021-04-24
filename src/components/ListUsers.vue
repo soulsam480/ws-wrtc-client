@@ -22,10 +22,8 @@ export default defineComponent({
 <template>
   <div class="chat-list" :class="{ full: showHam === true }">
     <div>
-      <h3>
-        Live Users
-        <span style="float: right" @click="$emit('close-side')">X</span>
-      </h3>
+      <button style="float: right" @click="$emit('close-side')">X</button>
+      <br />
       <button
         class="btn btn-indigo"
         v-if="connectedTo"
@@ -50,6 +48,7 @@ export default defineComponent({
       >
     </div>
     <hr />
+    <h4 style="padding:5px">Live Users</h4>
     <div
       v-for="u in userList"
       :key="u.id"

@@ -1,6 +1,6 @@
 <script lang="ts">
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { defineComponent, onMounted, reactive, ref } from 'vue';
+import { defineComponent, onMounted, ref, watchEffect } from 'vue';
 import { io } from 'socket.io-client';
 import ListUsers from '@/components/ListUsers.vue';
 import ChatArea from '@/components/ChatArea.vue';
@@ -20,13 +20,19 @@ export default defineComponent({
     const config = {
       iceServers: [
         {
-          urls: ['stun:stun.l.google.com:19302'],
+          urls: [
+            'stun:stun.l.google.com:19302',
+            'stun:stun1.l.google.com:19302',
+            'stun:stun2.l.google.com:19302',
+            'stun:stun3.l.google.com:19302',
+            'stun:stun4.l.google.com:19302',
+          ],
         },
       ],
     };
     let peerConnection = ref<Peer.Instance | null>(null).value;
-    const users = reactive<Array<User>>([]);
-    const messages = reactive<Array<Message>>([]);
+    const users = ref<Array<User>>([]).value;
+    const messages = ref<Array<Message>>([]).value;
     const socket = io(wsUrl, {
       transports: ['websocket'],
     });
@@ -39,6 +45,22 @@ export default defineComponent({
     const isConnected = ref(false);
     const stream = ref<MediaStream | null>(null);
     const isMuted = ref(true);
+    const modal = ref<{
+      isOpen: boolean;
+      type: 'call' | 'rejection' | '';
+      rejectedBy?: string;
+    }>({
+      isOpen: false,
+      type: '',
+      rejectedBy: '',
+    });
+    function resetModal() {
+      modal.value = { isOpen: false, type: '', rejectedBy: '' };
+    }
+    const callContext = ref<{ name: string; accept: boolean | null }>({
+      name: '',
+      accept: null,
+    });
     const submit = () => {
       socket.emit('add-user', {
         name: userName.value,
@@ -61,16 +83,26 @@ export default defineComponent({
       isMuted.value = !isMuted.value;
     }
     function closeCall() {
-      peerConnection?.destroy();
+      peerConnection?.end();
+    }
+    function killAudio() {
+      const audio = document.querySelector('audio') as HTMLAudioElement;
+      audio.load();
+      if ('srcObject' in audio) {
+        audio.srcObject = null;
+      } else {
+        (audio as HTMLAudioElement).src = '';
+        (audio as HTMLAudioElement).removeAttribute('src');
+      }
     }
     function createSender(id: string) {
       peerConnection = new Peer({
-        config: config,
         initiator: true,
         trickle: false,
         stream: stream.value as MediaStream,
       });
       peerConnection?.on('signal', (data) => {
+        if (data.renegotiate || data.transceiverRequest) return;
         socket.emit('call-user', {
           offer: JSON.stringify(data),
           user: {
@@ -85,6 +117,7 @@ export default defineComponent({
         messages.push(JSON.parse(new TextDecoder().decode(data)));
       });
       peerConnection.on('close', () => {
+        killAudio();
         isAlreadyCalling.value = false;
         remoteUser.value = '';
         isMuted.value = true;
@@ -92,23 +125,30 @@ export default defineComponent({
       });
       peerConnection?.on('stream', (stream) => {
         const audio = document.querySelector('audio') as HTMLAudioElement;
+        audio.load();
         if ('srcObject' in audio) {
           audio.srcObject = stream;
         } else {
           (audio as any).src = window.URL.createObjectURL(stream); // for older browsers
         }
-        audio.play();
+        const playPromise = audio.play();
+        if (playPromise !== undefined) {
+          playPromise.catch((error) => {
+            console.log(error);
+            audio.pause();
+          });
+        }
       });
     }
     function createReceiver(data: any) {
       const peer = new Peer({
-        config: config,
         trickle: false,
         stream: stream.value as MediaStream,
       });
       peerConnection = peer;
       peerConnection?.signal(data.offer);
       peerConnection?.on('signal', (dat) => {
+        if (data.renegotiate || data.transceiverRequest) return;
         socket.emit('make-answer', {
           answer: JSON.stringify(dat),
           to: data.user.id,
@@ -128,6 +168,7 @@ export default defineComponent({
         window.alert('connected!');
       });
       peerConnection.on('close', () => {
+        killAudio();
         isAlreadyCalling.value = false;
         remoteUser.value = '';
         isMuted.value = true;
@@ -135,12 +176,19 @@ export default defineComponent({
       });
       peerConnection?.on('stream', (stream) => {
         const audio = document.querySelector('audio') as HTMLAudioElement;
+        audio.load();
         if ('srcObject' in audio) {
           audio.srcObject = stream;
         } else {
           (audio as any).src = window.URL.createObjectURL(stream); // for older browsers
         }
-        audio.play();
+        const playPromise = audio.play();
+        if (playPromise !== undefined) {
+          playPromise.catch((error) => {
+            console.log(error);
+            audio.pause();
+          });
+        }
       });
     }
     const sendMessage = (val: Message) => {
@@ -172,10 +220,32 @@ export default defineComponent({
       });
 
       socket.on('call-made', async (data: any) => {
-        const res = confirm(`${data.user.name} is calling! accept ?`);
-        if (res) {
-          createReceiver(data);
-        }
+        callContext.value = { name: data.user.name, accept: null };
+        modal.value = { isOpen: true, type: 'call' };
+        watchEffect(() => {
+          if (callContext.value.accept === true) {
+            createReceiver(data);
+            modal.value = { isOpen: false, type: '' };
+          } else if (callContext.value.accept === false) {
+            socket.emit('make-rejection', {
+              to: data.user.id,
+              user: {
+                name: userName.value,
+                id: socket.id,
+              },
+            });
+            modal.value = { isOpen: false, type: '' };
+          }
+        });
+      });
+
+      socket.on('rejected', (data: any) => {
+        console.log('rejected by ' + data.user.name);
+        modal.value = {
+          isOpen: true,
+          type: 'rejection',
+          rejectedBy: data.user.name,
+        };
       });
 
       socket.on('answer-made', async (data: any) => {
@@ -204,6 +274,9 @@ export default defineComponent({
       isMuted,
       toggleAudio,
       closeCall,
+      modal,
+      callContext,
+      resetModal,
     };
   },
 });
@@ -211,6 +284,27 @@ export default defineComponent({
 
 <template>
   <div v-if="isConnected">
+    <div id="myModal" class="modal" v-if="modal.isOpen">
+      <div class="modal-content">
+        <template v-if="modal.type === 'call'">
+          <p>{{ callContext.name }} is Calling. Accept ?</p>
+          <button
+            class="btn btn-indigo"
+            style="margin-right: 5px"
+            @click="callContext.accept = true"
+          >
+            Yes
+          </button>
+          <button class="btn btn-red" @click="callContext.accept = false">
+            NO
+          </button>
+        </template>
+        <template v-else-if="modal.type === 'rejection'">
+          <p>{{ modal.rejectedBy }} rejected call !!</p>
+          <button class="btn" @click="resetModal">OK</button>
+        </template>
+      </div>
+    </div>
     <div class="text-center">
       <h1>Simple WebRTC chat</h1>
       <h1 class="indigo">
@@ -314,6 +408,43 @@ export default defineComponent({
 </template>
 
 <style lang="scss" scoped>
+.modal {
+  display: block; /* Hidden by default */
+  position: fixed; /* Stay in place */
+  z-index: 1; /* Sit on top */
+  left: 0;
+  top: 0;
+  width: 100%; /* Full width */
+  height: 100%; /* Full height */
+  overflow: auto; /* Enable scroll if needed */
+  background-color: rgb(0, 0, 0); /* Fallback color */
+  background-color: rgba(0, 0, 0, 0.4); /* Black w/ opacity */
+}
+
+/* Modal Content/Box */
+.modal-content {
+  text-align: center;
+  background-color: #fefefe;
+  margin: 15% auto; /* 15% from the top and centered */
+  padding: 20px;
+  border: 1px solid #888;
+  width: 80%; /* Could be more or less, depending on screen size */
+}
+
+/* The Close Button */
+.close {
+  color: #aaa;
+  float: right;
+  font-size: 28px;
+  font-weight: bold;
+}
+
+.close:hover,
+.close:focus {
+  color: black;
+  text-decoration: none;
+  cursor: pointer;
+}
 .text-center {
   text-align: center;
 }
