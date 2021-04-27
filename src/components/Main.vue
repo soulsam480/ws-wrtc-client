@@ -20,12 +20,15 @@ export default defineComponent({
     const config = {
       iceServers: [
         {
+          urls: ['turn:13.250.13.83:3478?transport=udp'],
+          username: 'YzYNCouZM1mhqhmseWk6',
+          credential: 'YzYNCouZM1mhqhmseWk6',
+        },
+        {
           urls: [
             'stun:stun.l.google.com:19302',
             'stun:stun1.l.google.com:19302',
             'stun:stun2.l.google.com:19302',
-            'stun:stun3.l.google.com:19302',
-            'stun:stun4.l.google.com:19302',
           ],
         },
       ],
@@ -100,6 +103,7 @@ export default defineComponent({
         initiator: true,
         trickle: false,
         stream: stream.value as MediaStream,
+        config,
       });
       peerConnection?.on('signal', (data) => {
         if (data.renegotiate || data.transceiverRequest) return;
@@ -122,6 +126,7 @@ export default defineComponent({
         remoteUser.value = '';
         isMuted.value = true;
         (stream.value as MediaStream).getAudioTracks()[0].enabled = false;
+        peerConnection = null;
       });
       peerConnection?.on('stream', (stream) => {
         const audio = document.querySelector('audio') as HTMLAudioElement;
@@ -144,6 +149,7 @@ export default defineComponent({
       const peer = new Peer({
         trickle: false,
         stream: stream.value as MediaStream,
+        config,
       });
       peerConnection = peer;
       peerConnection?.signal(data.offer);
@@ -173,6 +179,7 @@ export default defineComponent({
         remoteUser.value = '';
         isMuted.value = true;
         (stream.value as MediaStream).getAudioTracks()[0].enabled = false;
+        peerConnection = null;
       });
       peerConnection?.on('stream', (stream) => {
         const audio = document.querySelector('audio') as HTMLAudioElement;

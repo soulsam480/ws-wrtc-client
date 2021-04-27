@@ -38,12 +38,13 @@ export default defineComponent({
 </script>
 
 <template>
-  <div v-if="isCalling" class="parent">
-    <div class="messages" id="message">
+  <div v-if="isCalling" class="parent" data-test="msg-parent">
+    <div class="messages" id="message" data-test="msg-list">
       <div
         v-for="m in messages"
         :key="m.data"
         :class="m.from === me ? 'right' : 'left'"
+        data-test="msg"
       >
         <span>
           {{ m.data }}
@@ -57,13 +58,18 @@ export default defineComponent({
         class="inputbox"
         v-model="message.data"
         @keyup.enter="emitMessage"
+        data-test="msg-input"
       />
-      <button class=" btn btn-blue" @click="emitMessage">send</button>
+      <button class=" btn btn-blue" @click="emitMessage" data-test="send-msg">
+        send
+      </button>
     </div>
   </div>
   <div v-else>
     <br /><br /><br />
-    <div class="text-center"><h4>Please Connect to someone</h4></div>
+    <div class="text-center" data-test="not-calling">
+      <h4>Please Connect to someone</h4>
+    </div>
   </div>
 </template>
 
